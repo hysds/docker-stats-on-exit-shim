@@ -1,7 +1,5 @@
 # Docker Stats On Exit Shim
 
-[![Build Status](https://travis-ci.org/pymonger/docker-stats-on-exit-shim.svg?branch=master)](https://travis-ci.org/pymonger/docker-stats-on-exit-shim)
-
 This is a small utility designed to capture the statistics for the run of a Docker
 container before its destruction.
 
@@ -55,10 +53,10 @@ cd tmp
 wget https://dl.google.com/go/go1.13.4.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.13.4.linux-amd64.tar.gz 
 export PATH=$PATH:/usr/local/go/bin
-mkdir -p src/github.com/pymonger
+mkdir -p src/github.com/hysds
 export GOPATH=`pwd`
-cd src/github.com/pymonger
-git clone https://github.com/pymonger/docker-stats-on-exit-shim.git
+cd src/github.com/hysds
+git clone https://github.com/hysds/docker-stats-on-exit-shim.git
 cd docker-stats-on-exit-shim
 git submodule init && git submodule update
 go get .
