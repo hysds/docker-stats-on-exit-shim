@@ -1,6 +1,6 @@
 # Docker Stats On Exit Shim
 
-[![Build Status](https://travis-ci.org/delcypher/docker-stats-on-exit-shim.svg?branch=master)](https://travis-ci.org/delcypher/docker-stats-on-exit-shim)
+[![Build Status](https://travis-ci.org/pymonger/docker-stats-on-exit-shim.svg?branch=master)](https://travis-ci.org/pymonger/docker-stats-on-exit-shim)
 
 This is a small utility designed to capture the statistics for the run of a Docker
 container before its destruction.
@@ -50,10 +50,15 @@ $ cat output.json
 ## Building
 
 ```bash
-mkdir -p src/github.com/delcypher
+docker run --rm -ti -u $ID:$(id -g) -v $HOME/tmp:/home/ops/tmp hysds/dev bash --login
+cd tmp
+wget https://dl.google.com/go/go1.13.4.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.13.4.linux-amd64.tar.gz 
+export PATH=$PATH:/usr/local/go/bin
+mkdir -p src/github.com/pymonger
 export GOPATH=`pwd`
-cd src/github.com/delcypher
-git clone git@github.com:delcypher/docker-stats-on-exit-shim.git
+cd src/github.com/pymonger
+git clone https://github.com/pymonger/docker-stats-on-exit-shim.git
 cd docker-stats-on-exit-shim
 git submodule init && git submodule update
 go get .
