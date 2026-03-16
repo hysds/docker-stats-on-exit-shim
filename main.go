@@ -23,6 +23,7 @@ import (
   "time"
   cgroups "github.com/opencontainers/runc/libcontainer/cgroups"
   cgroups_fs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
+  cgroups_fs2 "github.com/opencontainers/runc/libcontainer/cgroups/fs2"
 )
 
 func printUsage() {
@@ -77,35 +78,48 @@ func main() {
   }
   defer f.Close()
 
-  // Find all the cgroup subsystems
-  subsystems, err := cgroups.GetAllSubsystems()
-  if err != nil {
-    fail("Failed to retrieve cgroup subsystem: %s\n", err)
-  }
-
-  subsystemToPathMap := make(map[string]string)
-
-  // Find where those subsystems are mounted
-  for _ , name := range subsystems {
-    // HACK: Skip `pids` subsystem if the file we need doesn't exist.
-    if name == "pids" {
-      if _, err := os.Stat("/sys/fs/cgroup/pids/pids.current"); os.IsNotExist(err) {
-        continue
-      }
-    }
-    path, err := cgroups.FindCgroupMountpoint(name)
+  // Detect cgroup version and create appropriate manager
+  var manager cgroups.Manager
+  if cgroups.IsCgroup2UnifiedMode() {
+    // cgroup v2 unified hierarchy
+    cgroupPath, err := cgroups.GetOwnCgroupPath("")
     if err != nil {
-      fail("Failed to get path for cgroup %s: %s\n", name, err)
+      fail("Failed to get own cgroup path: %s\n", err)
     }
-    //fmt.Printf("Found %s with path %s\n", name, path)
-    subsystemToPathMap[name] = path
-  }
+    manager, err = cgroups_fs2.NewManager(nil, cgroupPath)
+    if err != nil {
+      fail("Failed to create cgroup v2 manager: %s\n", err)
+    }
+    fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v2 (path: %s)\n", cgroupPath)
+  } else {
+    // cgroup v1 per-subsystem hierarchy
+    subsystems, err := cgroups.GetAllSubsystems()
+    if err != nil {
+      fail("Failed to retrieve cgroup subsystem: %s\n", err)
+    }
 
-  // Make a fake Cgroup manager
-  // FIXME: We're assuming cgroupV1 layout here. We should
-  // have some sort of configuration time option to choose
-  // what to use.
-  manager := cgroups_fs.Manager{ Paths:subsystemToPathMap }
+    subsystemToPathMap := make(map[string]string)
+
+    // Find where those subsystems are mounted
+    for _, name := range subsystems {
+      // HACK: Skip `pids` subsystem if the file we need doesn't exist.
+      if name == "pids" {
+        if _, err := os.Stat("/sys/fs/cgroup/pids/pids.current"); os.IsNotExist(err) {
+          continue
+        }
+      }
+      path, err := cgroups.FindCgroupMountpoint("", name)
+      if err != nil {
+        fail("Failed to get path for cgroup %s: %s\n", name, err)
+      }
+      subsystemToPathMap[name] = path
+    }
+    manager, err = cgroups_fs.NewManager(nil, subsystemToPathMap)
+    if err != nil {
+      fail("Failed to create cgroup v1 manager: %s\n", err)
+    }
+    fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v1\n")
+  }
 
 
   // Run the subproccess
