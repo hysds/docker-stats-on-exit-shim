@@ -22,6 +22,7 @@ import (
   "syscall"
   "time"
   cgroups "github.com/opencontainers/runc/libcontainer/cgroups"
+  "github.com/opencontainers/runc/libcontainer/configs"
   cgroups_fs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
   cgroups_fs2 "github.com/opencontainers/runc/libcontainer/cgroups/fs2"
 )
@@ -114,7 +115,9 @@ func main() {
       }
       subsystemToPathMap[name] = path
     }
-    manager, err = cgroups_fs.NewManager(nil, subsystemToPathMap)
+    // Create a minimal cgroup config for the manager
+    cg := &configs.Cgroup{}
+    manager, err = cgroups_fs.NewManager(cg, subsystemToPathMap)
     if err != nil {
       fail("Failed to create cgroup v1 manager: %s\n", err)
     }
