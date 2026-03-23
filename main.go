@@ -148,11 +148,10 @@ func main() {
       }
       subsystemToPathMap[name] = path
     }
-    // Create a minimal cgroup config for the manager
-    // Resources must be set for cgroup v1 manager
-    cg := &configs.Cgroup{
-      Resources: &configs.Resources{},
-    }
+    // Create a cgroup config for the manager
+    // Resources must be set for cgroup v1 manager (it's an embedded pointer)
+    cg := &configs.Cgroup{}
+    cg.Resources = &configs.Resources{}
     manager, err = cgroups_fs.NewManager(cg, subsystemToPathMap)
     if err != nil {
       fail("Failed to create cgroup v1 manager: %s\n", err)
