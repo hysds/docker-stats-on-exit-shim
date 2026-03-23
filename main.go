@@ -124,7 +124,7 @@ func main() {
     if err != nil {
       fail("Failed to create cgroup v2 manager: %s\n", err)
     }
-    fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v2 (path: %s)\n", cgroupPath)
+    // fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v2 (path: %s)\n", cgroupPath)
   } else {
     // cgroup v1 per-subsystem hierarchy
     subsystems, err := cgroups.GetAllSubsystems()
@@ -156,7 +156,7 @@ func main() {
     if err != nil {
       fail("Failed to create cgroup v1 manager: %s\n", err)
     }
-    fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v1\n")
+    // fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v1\n")
   }
 
 
