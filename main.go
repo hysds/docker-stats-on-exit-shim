@@ -14,11 +14,13 @@
 package main
 
 import (
+  "bufio"
   "encoding/json"
   "fmt"
   "os"
   "os/exec"
   "os/signal"
+  "strings"
   "syscall"
   "time"
   cgroups "github.com/opencontainers/runc/libcontainer/cgroups"
@@ -83,11 +85,42 @@ func main() {
   var manager cgroups.Manager
   if cgroups.IsCgroup2UnifiedMode() {
     // cgroup v2 unified hierarchy
-    cgroupPath, err := cgroups.GetOwnCgroupPath("")
+    // Read cgroup path directly from /proc/self/cgroup
+    // Format for cgroup v2: "0::/path"
+    file, err := os.Open("/proc/self/cgroup")
     if err != nil {
-      fail("Failed to get own cgroup path: %s\n", err)
+      fail("Failed to open /proc/self/cgroup: %s\n", err)
     }
-    manager, err = cgroups_fs2.NewManager(nil, cgroupPath)
+    defer file.Close()
+    
+    var cgroupPath string
+    scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+      line := scanner.Text()
+      // cgroup v2 format: "0::/path"
+      if strings.HasPrefix(line, "0::") {
+        cgroupPath = strings.TrimPrefix(line, "0::")
+        break
+      }
+    }
+    if err := scanner.Err(); err != nil {
+      fail("Failed to read /proc/self/cgroup: %s\n", err)
+    }
+    if cgroupPath == "" {
+      fail("Failed to find cgroup v2 path in /proc/self/cgroup\n")
+    }
+    
+    // cgroup v2 files are mounted at /sys/fs/cgroup
+    // The path from /proc/self/cgroup is relative, so we need the full path
+    fullPath := "/sys/fs/cgroup" + cgroupPath
+    
+    // Create a minimal cgroup config for the manager
+    // Resources must be set for cgroup v2 manager
+    cg := &configs.Cgroup{
+      Path: cgroupPath,
+      Resources: &configs.Resources{},
+    }
+    manager, err = cgroups_fs2.NewManager(cg, fullPath)
     if err != nil {
       fail("Failed to create cgroup v2 manager: %s\n", err)
     }
@@ -116,7 +149,10 @@ func main() {
       subsystemToPathMap[name] = path
     }
     // Create a minimal cgroup config for the manager
-    cg := &configs.Cgroup{}
+    // Resources must be set for cgroup v1 manager
+    cg := &configs.Cgroup{
+      Resources: &configs.Resources{},
+    }
     manager, err = cgroups_fs.NewManager(cg, subsystemToPathMap)
     if err != nil {
       fail("Failed to create cgroup v1 manager: %s\n", err)
