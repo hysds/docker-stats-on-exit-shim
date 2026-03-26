@@ -14,15 +14,19 @@
 package main
 
 import (
+  "bufio"
   "encoding/json"
   "fmt"
   "os"
   "os/exec"
   "os/signal"
+  "strings"
   "syscall"
   "time"
   cgroups "github.com/opencontainers/runc/libcontainer/cgroups"
+  "github.com/opencontainers/runc/libcontainer/configs"
   cgroups_fs "github.com/opencontainers/runc/libcontainer/cgroups/fs"
+  cgroups_fs2 "github.com/opencontainers/runc/libcontainer/cgroups/fs2"
 )
 
 func printUsage() {
@@ -77,35 +81,83 @@ func main() {
   }
   defer f.Close()
 
-  // Find all the cgroup subsystems
-  subsystems, err := cgroups.GetAllSubsystems()
-  if err != nil {
-    fail("Failed to retrieve cgroup subsystem: %s\n", err)
-  }
-
-  subsystemToPathMap := make(map[string]string)
-
-  // Find where those subsystems are mounted
-  for _ , name := range subsystems {
-    // HACK: Skip `pids` subsystem if the file we need doesn't exist.
-    if name == "pids" {
-      if _, err := os.Stat("/sys/fs/cgroup/pids/pids.current"); os.IsNotExist(err) {
-        continue
+  // Detect cgroup version and create appropriate manager
+  var manager cgroups.Manager
+  if cgroups.IsCgroup2UnifiedMode() {
+    // cgroup v2 unified hierarchy
+    // Read cgroup path directly from /proc/self/cgroup
+    // Format for cgroup v2: "0::/path"
+    file, err := os.Open("/proc/self/cgroup")
+    if err != nil {
+      fail("Failed to open /proc/self/cgroup: %s\n", err)
+    }
+    defer file.Close()
+    
+    var cgroupPath string
+    scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+      line := scanner.Text()
+      // cgroup v2 format: "0::/path"
+      if strings.HasPrefix(line, "0::") {
+        cgroupPath = strings.TrimPrefix(line, "0::")
+        break
       }
     }
-    path, err := cgroups.FindCgroupMountpoint(name)
-    if err != nil {
-      fail("Failed to get path for cgroup %s: %s\n", name, err)
+    if err := scanner.Err(); err != nil {
+      fail("Failed to read /proc/self/cgroup: %s\n", err)
     }
-    //fmt.Printf("Found %s with path %s\n", name, path)
-    subsystemToPathMap[name] = path
-  }
+    if cgroupPath == "" {
+      fail("Failed to find cgroup v2 path in /proc/self/cgroup\n")
+    }
+    
+    // cgroup v2 files are mounted at /sys/fs/cgroup
+    // The path from /proc/self/cgroup is relative, so we need the full path
+    fullPath := "/sys/fs/cgroup" + cgroupPath
+    
+    // Create a minimal cgroup config for the manager
+    // Resources must be set for cgroup v2 manager
+    cg := &configs.Cgroup{
+      Path: cgroupPath,
+      Resources: &configs.Resources{},
+    }
+    manager, err = cgroups_fs2.NewManager(cg, fullPath)
+    if err != nil {
+      fail("Failed to create cgroup v2 manager: %s\n", err)
+    }
+    // fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v2 (path: %s)\n", cgroupPath)
+  } else {
+    // cgroup v1 per-subsystem hierarchy
+    subsystems, err := cgroups.GetAllSubsystems()
+    if err != nil {
+      fail("Failed to retrieve cgroup subsystem: %s\n", err)
+    }
 
-  // Make a fake Cgroup manager
-  // FIXME: We're assuming cgroupV1 layout here. We should
-  // have some sort of configuration time option to choose
-  // what to use.
-  manager := cgroups_fs.Manager{ Paths:subsystemToPathMap }
+    subsystemToPathMap := make(map[string]string)
+
+    // Find where those subsystems are mounted
+    for _, name := range subsystems {
+      // HACK: Skip `pids` subsystem if the file we need doesn't exist.
+      if name == "pids" {
+        if _, err := os.Stat("/sys/fs/cgroup/pids/pids.current"); os.IsNotExist(err) {
+          continue
+        }
+      }
+      path, err := cgroups.FindCgroupMountpoint("", name)
+      if err != nil {
+        fail("Failed to get path for cgroup %s: %s\n", name, err)
+      }
+      subsystemToPathMap[name] = path
+    }
+    // Create a cgroup config for the manager
+    // Resources must be set for cgroup v1 manager (it's an embedded pointer)
+    cg := &configs.Cgroup{}
+    cg.Resources = &configs.Resources{}
+    manager, err = cgroups_fs.NewManager(cg, subsystemToPathMap)
+    if err != nil {
+      fail("Failed to create cgroup v1 manager: %s\n", err)
+    }
+    // fmt.Fprintf(os.Stderr, "docker-stats-on-exit-shim: using cgroup v1\n")
+  }
 
 
   // Run the subproccess

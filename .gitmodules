@@ -1,3 +1,0 @@
-[submodule "vendor/github.com/opencontainers/runc"]
-	path = vendor/github.com/opencontainers/runc
-	url = https://github.com/opencontainers/runc.git

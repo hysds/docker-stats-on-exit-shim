@@ -8,6 +8,13 @@ real command by waiting for it to exit and then querying the active Cgroup subsy
 to gather their statistics. It dumps these statistics to a file as JSON and then exits
 with the exit code of the real command.
 
+## Features
+
+- **Automatic cgroup v1/v2 detection**: Detects cgroup version at runtime and uses the appropriate API
+- **Backward compatible**: Produces identical JSON output structure on both cgroup v1 and v2 hosts
+- **Rootless container support**: Works correctly with rootless Docker/Podman (requires cgroup v2)
+- **Drop-in replacement**: No changes needed to downstream consumers
+
 ## Example
 
 ```bash
@@ -47,20 +54,33 @@ $ cat output.json
 
 ## Building
 
+This project uses Go modules (requires Go 1.22+).
+
+### Local Build
+
 ```bash
-docker run --rm -ti -u $ID:$(id -g) -v $HOME/tmp:/home/ops/tmp hysds/dev bash --login
-cd tmp
-wget https://dl.google.com/go/go1.13.4.linux-amd64.tar.gz
-sudo tar -C /usr/local -xzf go1.13.4.linux-amd64.tar.gz 
-export PATH=$PATH:/usr/local/go/bin
-mkdir -p src/github.com/hysds
-export GOPATH=`pwd`
-cd src/github.com/hysds
 git clone https://github.com/hysds/docker-stats-on-exit-shim.git
 cd docker-stats-on-exit-shim
-git submodule init && git submodule update
-go get .
-go build
+go mod download
+go build -o docker-stats-on-exit-shim .
+```
+
+### Cross-Compile for Linux
+
+```bash
+GOOS=linux GOARCH=amd64 go build -o docker-stats-on-exit-shim .
+```
+
+### Run Tests
+
+```bash
+go test -v ./...
+```
+
+### Build in Docker Container
+
+```bash
+docker run --rm -v $(pwd):/workspace -w /workspace golang:1.22 go build -o docker-stats-on-exit-shim .
 ```
 
 ## Caveats
